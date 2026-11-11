@@ -63,7 +63,7 @@
     try {
       if (desktop) shortcutErrors = await invoke<string[]>('save_config', { config });
       saved = JSON.stringify(config);
-      notice = desktop ? 'Changes saved. Your shortcuts are ready.' : 'Preview saved in memory only.';
+      notice = desktop ? (shortcutErrors.length ? 'Settings saved. Resolve the shortcut conflicts below.' : 'Changes saved. Your shortcuts are ready.') : 'Preview saved in memory only.';
     } catch (e) { error = String(e); }
     finally { saving = false; }
   }
@@ -177,7 +177,7 @@
       {#each config.prompts as item, index (item.id)}
         <button class:active={section === 'prompts' && selectedId === item.id} class="prompt-link" onclick={() => select(item.id)}>
           <span class="prompt-icon">{['Aa', '文', '↙'][index % 3]}</span>
-          <span class="prompt-link-name">{item.name}<small>{item.enabled ? (item.shortcut ? 'Shortcut active after save' : 'Add a shortcut') : 'Paused'}</small></span>
+          <span class="prompt-link-name">{item.name}<small>{item.enabled ? (item.shortcut ? (item.output === 'replace' ? 'Replace selected text' : 'Review result') : 'Add a shortcut') : 'Paused'}</small></span>
           {#if item.shortcut}<kbd>{item.shortcut.split('+').at(-1)}</kbd>{/if}
         </button>
       {/each}
@@ -200,7 +200,7 @@
         {#if !desktop}<div class="banner notice">Browser preview. Global shortcuts and OpenRouter run in the desktop app.</div>{/if}
 
         {#if section === 'settings'}
-          <div class="eyebrow">MAKE IT YOURS</div><h1>A Small App.<br />Your Own Setup.</h1><p class="intro">Connect your model, bring your shortcuts, keep control.</p>
+          <div class="eyebrow">MAKE IT YOURS</div><h1>Settings</h1><p class="intro">Connect your model, bring your shortcuts, keep control.</p>
           <section class="card">
             <div class="card-heading"><h2>OpenRouter Connection</h2><span class:ready={hasKey} class="pill">{hasKey ? 'Key stored' : 'Not connected'}</span></div>
             <p class="muted">Your key is stored in {mac ? 'macOS Keychain' : 'Windows Credential Manager'}. It is never included in prompt exports.</p>
@@ -215,16 +215,16 @@
           </section>
           <section class="card"><h2>Take Your Prompts With You</h2><p class="muted">Export your settings or import a shared collection. API keys stay on each person's device.</p><div class="button-row"><button class="secondary" onclick={exportPrompts}>Export Prompts ↓</button><label class="secondary file-label">Import Prompts ↑<input type="file" accept="application/json,.json" onchange={importPrompts} /></label></div></section>
         {:else if prompt}
-          <div class="editor-heading"><div><div class="eyebrow">A LITTLE LESS REPETITION</div><h1>{prompt.name}</h1><p class="intro">Select some text. Press your shortcut. Keep going.</p></div><label class="enabled-toggle"><input type="checkbox" bind:checked={prompt.enabled} /><span>{prompt.enabled ? 'Enabled' : 'Paused'}</span></label></div>
+          <div class="editor-heading"><div><div class="eyebrow">YOUR PROMPTS</div><h1>{prompt.name}</h1><p class="intro">Select some text. Press your shortcut. Keep going.</p></div><label class="enabled-toggle"><input type="checkbox" bind:checked={prompt.enabled} /><span>{prompt.enabled ? 'Enabled' : 'Paused'}</span></label></div>
           {#if !hasKey}<button class="setup-callout" onclick={() => section = 'settings'}><span class="callout-icon">↗</span><span><strong>One key. All your prompts.</strong><small>Add your OpenRouter API key to start using PromptKey.</small></span><span>Set Up →</span></button>{/if}
           <section class="card editor-card">
             <div class="section-number">01 <span>THE PROMPT</span></div>
             <label for="prompt-name">Name</label><input id="prompt-name" bind:value={prompt.name} maxlength="120" placeholder="Give this prompt a name" />
             <div class="label-line"><label for="instructions">Instructions</label><span>Applies to your selected text</span></div><textarea id="instructions" class="instructions" bind:value={prompt.instructions} spellcheck="false" placeholder="What should happen to the selected text?"></textarea>
-            <div class="two-column"><div><label for="prompt-model">Model</label><input id="prompt-model" bind:value={prompt.model} placeholder="Use workspace default" spellcheck="false" /><p class="hint">{prompt.model || config.defaultModel}</p></div><div><label for="output">After the Response</label><select id="output" bind:value={prompt.output}><option value="replace">Replace Selection</option><option value="review">Show Result for Review</option></select><p class="hint">A changed selection is always left untouched.</p></div></div>
+            <div class="two-column"><div><label for="prompt-model">Model</label><input id="prompt-model" bind:value={prompt.model} placeholder="Use workspace default" spellcheck="false" /><p class="hint">{prompt.model || config.defaultModel}</p></div><div><label for="output">After the Response</label><select id="output" bind:value={prompt.output}><option value="replace">Replace Selection</option><option value="review">Show Result for Review</option></select><p class="hint">If the selection changes, the result opens for review.</p></div></div>
           </section>
-          <section class="card shortcut-card"><div><div class="section-number">02 <span>THE SHORTCUT</span></div><h2>Make It Muscle Memory.</h2><p class="muted">Works while you're in another app.</p></div><div class="shortcut-controls"><button class:recording class="shortcut-recorder" aria-label="Record shortcut" onclick={() => recording ? stopRecording() : startRecording()} disabled={busy}>{#if recording}<span>Press your keys…</span>{:else}{#each prettyShortcut(prompt.shortcut, mac) as key}<kbd>{key}</kbd>{/each}{/if}</button><div class="recorder-actions">{#if recording}<button class="text-button" onclick={stopRecording}>Cancel · Esc</button>{:else}<span>Click to record</span>{#if prompt.shortcut}<button class="text-button" onclick={() => prompt.shortcut = ''}>Clear</button>{/if}{/if}</div></div></section>
-          <section class="card"><div class="card-heading"><div><div class="section-number">03 <span>TRY IT OUT</span></div><h2>A Quick Test.</h2></div><button class="secondary" onclick={test} disabled={!desktop || !hasKey || testing || !sample.trim()}>{testing ? 'Working…' : 'Test Prompt ↗'}</button></div><label for="sample" class="sr-only">Sample text</label><textarea id="sample" class="sample" bind:value={sample}></textarea><p class="hint">Sends only this sample to OpenRouter. No other app is changed.</p>{#if sampleResult}<div class="test-result"><div class="eyebrow">RESULT</div><p>{sampleResult}</p></div>{/if}</section>
+          <section class="card shortcut-card"><div><div class="section-number">02 <span>THE SHORTCUT</span></div><h2>Your Shortcut</h2><p class="muted">Works while you're in another app.</p></div><div class="shortcut-controls"><button class:recording class="shortcut-recorder" aria-label="Record shortcut" onclick={() => recording ? stopRecording() : startRecording()} disabled={busy}>{#if recording}<span>Press your keys…</span>{:else}{#each prettyShortcut(prompt.shortcut, mac) as key}<kbd>{key}</kbd>{/each}{/if}</button><div class="recorder-actions">{#if recording}<button class="text-button" onclick={stopRecording}>Cancel · Esc</button>{:else}<span>Click to record</span>{#if prompt.shortcut}<button class="text-button" onclick={() => prompt.shortcut = ''}>Clear</button>{/if}{/if}</div></div></section>
+          <section class="card"><div class="card-heading"><div><div class="section-number">03 <span>TRY IT OUT</span></div><h2>Test This Prompt</h2></div><button class="secondary" onclick={test} disabled={!desktop || !hasKey || testing || !sample.trim()}>{testing ? 'Working…' : 'Test Prompt ↗'}</button></div><label for="sample" class="sr-only">Sample text</label><textarea id="sample" class="sample" bind:value={sample}></textarea><p class="hint">Sends only this sample to OpenRouter. No other app is changed.</p>{#if sampleResult}<div class="test-result"><div class="eyebrow">RESULT</div><p>{sampleResult}</p></div>{/if}</section>
           <div class="editor-footer"><span>Changes take effect when you save.</span><button class="text-button danger" onclick={removePrompt} onblur={() => deleteArmed = false}>{deleteArmed ? 'Confirm Delete' : 'Delete Prompt'}</button></div>
         {:else}
           <div class="empty-state"><div class="eyebrow">YOUR NEXT SHORTCUT STARTS HERE</div><h1>One Less Repeated Task.</h1><p class="intro">Add a prompt for something you write every day.</p><button class="primary" onclick={add}>＋ Create Your First Prompt</button></div>
