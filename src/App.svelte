@@ -4,6 +4,7 @@
   import { listen } from '@tauri-apps/api/event';
   import type { Bootstrap, Config, Status } from './lib/types';
   import { prettyShortcut, recordShortcut } from './lib/shortcuts';
+  import { parseImport } from './lib/import';
 
   const desktop = isTauri();
   const defaultConfig: Config = {
@@ -123,8 +124,12 @@
 
   async function test() {
     if (!prompt) return;
+    const testedId = prompt.id;
     testing = true; error = ''; sampleResult = '';
-    try { sampleResult = await invoke<string>('test_prompt', { prompt, text: sample }); }
+    try {
+      const result = await invoke<string>('test_prompt', { prompt, text: sample });
+      if (selectedId === testedId) sampleResult = result;
+    }
     catch (e) { error = String(e); }
     finally { testing = false; }
   }
@@ -141,14 +146,7 @@
     const file = input.files?.[0]; if (!file) return;
     try {
       if (file.size > 4_000_000) throw new Error('Choose a settings file smaller than 4 MB.');
-      const imported = JSON.parse(await file.text()) as Config;
-      if (imported.version !== 1 || !Array.isArray(imported.prompts) || typeof imported.defaultModel !== 'string' || imported.prompts.length > 100) throw new Error('That is not a supported PromptKey settings file.');
-      for (const p of imported.prompts) {
-        if (!['id', 'name', 'instructions', 'shortcut', 'model', 'output'].every(k => typeof p[k as keyof typeof p] === 'string') || typeof p.enabled !== 'boolean' || !['replace', 'review'].includes(p.output)) throw new Error('A prompt in this file is invalid.');
-      }
-      // Import only known fields, never secrets or autostart preferences.
-      config.defaultModel = imported.defaultModel;
-      config.prompts = imported.prompts.map(p => ({ id: p.id, name: p.name, instructions: p.instructions, shortcut: p.shortcut, model: p.model, output: p.output, enabled: p.enabled }));
+      config = parseImport(await file.text(), config.launchAtLogin);
       selectedId = config.prompts[0]?.id ?? '';
       notice = 'Imported. Review your prompts and save to activate them.';
     } catch (e) { error = String(e); }

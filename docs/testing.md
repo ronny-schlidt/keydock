@@ -23,7 +23,7 @@ Record completed checks here when they are actually performed. The initial imple
 2026-11-11, macOS development machine:
 
 - Svelte/TypeScript check: zero errors and warnings.
-- Frontend tests: three passed; production frontend build passed.
+- Frontend tests: six passed, including rejecting duplicate IDs and malformed records during import; production frontend build passed.
 - Rust tests: seven passed; Clippy with warnings denied passed.
 - Browser preview: visually checked prompt editor and settings; created/renamed a prompt, recorded a shortcut and saved the preview state. This is UI evidence, not native copy/paste or API evidence.
 - No real OpenRouter call has been made during development; the user enters their own key in the installed app.
