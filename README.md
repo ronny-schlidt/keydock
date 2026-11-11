@@ -45,7 +45,7 @@ PromptKey depends on the destination app supporting normal copy/paste. Secure/pa
 
 The initial Windows implementation identifies the foreground window, focused control and caret position. macOS additionally checks the accessibility selection range when the destination exposes one. Identical text in controls that do not expose distinct accessibility identities is a remaining edge case; use review mode in those applications. There is no universal OS transaction that makes selection checking and a simulated paste atomic.
 
-Unsigned local builds may show macOS Gatekeeper or Windows SmartScreen prompts. Distribution signing/notarization is not configured. Build the source yourself or use artifacts from a trusted run in this private repository.
+macOS development bundles use a local ad-hoc signature; Windows installers are unsigned. Downloaded builds may show macOS Gatekeeper or Windows SmartScreen prompts. Distribution signing/notarization is not configured. Build the source yourself or use artifacts from a trusted run in this private repository.
 
 ## Development
 
@@ -72,6 +72,8 @@ Build a distributable on the target OS:
 ```sh
 # macOS: creates src-tauri/target/release/bundle/macos/PromptKey.app
 npm run tauri build -- --bundles app
+codesign --force --deep --sign - src-tauri/target/release/bundle/macos/PromptKey.app
+codesign --verify --deep --strict src-tauri/target/release/bundle/macos/PromptKey.app
 
 # Windows: creates an installer under src-tauri/target/release/bundle/nsis/
 npm run tauri build -- --bundles nsis
