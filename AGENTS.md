@@ -1,4 +1,4 @@
-# PromptKey
+# KeyDock
 
 Cross-platform desktop app: Tauri 2 + Rust backend, Svelte 5 + TypeScript frontend. macOS and Windows are the supported targets.
 

@@ -28,8 +28,12 @@ Record completed checks here when they are actually performed. The initial imple
 - Browser preview: visually checked prompt editor and settings; created/renamed a prompt, recorded a shortcut and saved the preview state. This is UI evidence, not native copy/paste or API evidence.
 - No real OpenRouter call has been made during development; the user enters their own key in the installed app.
 - Native macOS release bundle built successfully (about 6.1 MiB), locally signed, verified with `codesign --verify --deep --strict`, launched, and visually checked in the prompt editor and Settings. The initial key field is empty and the Accessibility requirement is correctly shown.
-- GitHub Actions [run 42990135686](https://github.com/ronny-schlidt/promptkey/actions/runs/42990135686) passed frontend checks, Rust tests/Clippy and release packaging on macOS and Windows. Windows installer creation is confirmed; interactive Windows copy/paste remains untested.
+- GitHub Actions [run 42990135686](https://github.com/ronny-schlidt/keydock/actions/runs/42990135686) passed frontend checks, Rust tests/Clippy and release packaging on macOS and Windows. Windows installer creation is confirmed; interactive Windows copy/paste remains untested.
 
 Packaging note (Tauri CLI 2.x, macOS, verified 2026-11-11): the generated `.app` without explicit bundle signing failed strict signature verification with “code has no resources but signature indicates they must be present.” Signing the finished local bundle with `codesign --force --deep --sign -` and verifying it fixed startup integrity. The workflow performs these steps before archiving. This is an ad-hoc development signature, not Developer ID signing or notarization.
 
 Dependency audit on the same date: after updating Vite, its Svelte plugin and Vitest, npm reports only the upstream low-severity `deepmerge` development dependency advisory [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4), propagated through the Svelte Vite plugin. There is no upstream fix available. This dependency is used to merge trusted build configuration and is not shipped in the application runtime. Recheck when updating the build toolchain; do not apply an unreviewed forced override.
+
+## KeyDock Rename Validation
+
+2026-11-12: the existing six frontend tests and seven Rust tests passed after renaming the app and packages. Svelte/TypeScript reported zero errors and warnings, the frontend production build passed, and Rust formatting/Clippy passed. The KeyDock title, K icon and sidebar branding were checked in the local browser preview. The app identifier, credential service and prompt schema were unchanged. This rename does not add evidence of interactive Windows testing.

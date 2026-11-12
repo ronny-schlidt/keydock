@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PromptKey",
+  "productName": "KeyDock",
   "version": "0.1.0",
   "identifier": "com.ronnyschlidt.promptkey",
   "build": {
@@ -10,7 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "PromptKey", "width": 1080, "height": 760, "minWidth": 780, "minHeight": 600, "visible": false }],
+    "windows": [{ "label": "main", "title": "KeyDock", "width": 1080, "height": 760, "minWidth": 780, "minHeight": 600, "visible": false }],
     "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'" }
   },
   "bundle": {

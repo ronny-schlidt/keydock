@@ -12,6 +12,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+// Keep the original credential namespace so the rename preserves saved API keys.
 const KEY_SERVICE: &str = "com.ronnyschlidt.promptkey";
 
 #[derive(Clone, Serialize)]
@@ -67,7 +68,7 @@ fn publish(app: &tauri::AppHandle, status: Status) {
         *current = status.clone();
     }
     if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_tooltip(Some(format!("PromptKey — {}", status.message)));
+        let _ = tray.set_tooltip(Some(format!("KeyDock — {}", status.message)));
         #[cfg(target_os = "macos")]
         let _ = tray.set_title(if status.phase == "working" {
             Some("···")
@@ -419,16 +420,15 @@ pub fn run() {
             let errors = register_shortcuts(app.handle(), &config);
             *app.state::<AppState>().shortcut_errors.lock().unwrap() = errors;
             use tauri::menu::{Menu, MenuItem};
-            let settings =
-                MenuItem::with_id(app, "settings", "Open PromptKey", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit PromptKey", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "Open KeyDock", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit KeyDock", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
             tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
                     "../icons/tray.png"
                 ))?)
                 .icon_as_template(true)
-                .tooltip("PromptKey — Ready")
+                .tooltip("KeyDock — Ready")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -459,5 +459,5 @@ pub fn run() {
         });
     builder
         .run(tauri::generate_context!())
-        .expect("Could not start PromptKey");
+        .expect("Could not start KeyDock");
 }

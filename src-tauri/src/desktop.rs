@@ -53,7 +53,7 @@ fn chord(key: char) -> Result<(), String> {
         ..Settings::default()
     };
     let mut keyboard = Enigo::new(&settings)
-        .map_err(|_| "Allow PromptKey in System Settings → Privacy & Security → Accessibility.")?;
+        .map_err(|_| "Allow KeyDock in System Settings → Privacy & Security → Accessibility.")?;
     let modifier = if cfg!(target_os = "macos") {
         Key::Meta
     } else {
@@ -177,7 +177,7 @@ pub fn capture_selection(own_window_focused: bool) -> Result<Selection, String> 
         return Err("Select text in another app, then press your prompt shortcut.".into());
     }
     if !has_permissions() {
-        return Err("Allow PromptKey in System Settings → Privacy & Security → Accessibility, then try again.".into());
+        return Err("Allow KeyDock in System Settings → Privacy & Security → Accessibility, then try again.".into());
     }
     wait_for_modifiers()?;
     let target = native::target()?;

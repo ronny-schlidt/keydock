@@ -18,7 +18,7 @@ pub async fn complete(
     };
     let response = client.post("https://openrouter.ai/api/v1/chat/completions")
         .bearer_auth(key)
-        .header("X-Title", "PromptKey")
+        .header("X-Title", "KeyDock")
         .json(&json!({
             "model": model,
             "messages": [

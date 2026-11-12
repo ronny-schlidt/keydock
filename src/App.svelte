@@ -137,7 +137,7 @@
   function exportPrompts() {
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.download = 'promptkey-prompts.json'; link.click();
+    const link = document.createElement('a'); link.href = url; link.download = 'keydock-prompts.json'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
@@ -156,7 +156,7 @@
   async function checkPermission() {
     await invoke('request_accessibility');
     const data = await invoke<Bootstrap>('bootstrap'); accessibility = data.accessibility;
-    if (!accessibility) notice = 'Enable PromptKey in Accessibility, then click Check Access again.';
+    if (!accessibility) notice = 'Enable KeyDock in Accessibility, then click Check Access again.';
   }
 
   async function copyResult() {
@@ -169,7 +169,7 @@
 
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">P<span>↗</span></span><div>PromptKey<small>YOUR WORDS, ONE SHORTCUT AWAY</small></div></div>
+    <div class="brand"><span class="brand-mark">K<span>↗</span></span><div>KeyDock<small>YOUR SHORTCUTS, ONE PLACE</small></div></div>
     <div class="sidebar-caption"><span>YOUR PROMPTS</span><span>{config.prompts.length.toString().padStart(2, '0')}</span></div>
     <nav aria-label="Prompts">
       {#each config.prompts as item, index (item.id)}
@@ -184,7 +184,7 @@
     <div class="sidebar-bottom">
       <button class:active={section === 'settings'} class="settings-link" onclick={() => { void stopRecording(); section = 'settings'; }}>⚙ <span>Settings</span><span class:connected={hasKey} class="connection-dot"></span></button>
       <p>Runs on your device.<br />Your own key. Your own prompts.</p>
-      <span class="version">PROMPTKEY <span>0.1.0</span></span>
+      <span class="version">KEYDOCK <span>0.1.0</span></span>
     </div>
   </aside>
 
@@ -208,13 +208,13 @@
           </section>
           <section class="card"><h2>Shortcuts & Startup</h2>
             <p class="muted">Hyper means {mac ? 'Control + Option + Shift + Command' : 'Control + Alt + Shift + Windows'}. Map a key such as Caps Lock using your existing keyboard tool. Ordinary shortcuts work too.</p>
-            <label class="toggle-row"><span>Launch PromptKey at login<small>Start quietly in the {mac ? 'menu bar' : 'system tray'}.</small></span><input type="checkbox" bind:checked={config.launchAtLogin} /></label>
+            <label class="toggle-row"><span>Launch KeyDock at login<small>Start quietly in the {mac ? 'menu bar' : 'system tray'}.</small></span><input type="checkbox" bind:checked={config.launchAtLogin} /></label>
             {#if mac}<div class="permission-row"><div><strong>Accessibility Access</strong><p class="hint">{accessibility ? 'Access granted.' : 'Required to read and replace text in other apps.'}</p></div><button class="secondary" onclick={checkPermission} disabled={!desktop}>Check Access</button></div>{/if}
           </section>
           <section class="card"><h2>Take Your Prompts With You</h2><p class="muted">Export your settings or import a shared collection. API keys stay on each person's device.</p><div class="button-row"><button class="secondary" onclick={exportPrompts}>Export Prompts ↓</button><label class="secondary file-label">Import Prompts ↑<input type="file" accept="application/json,.json" onchange={importPrompts} /></label></div></section>
         {:else if prompt}
           <div class="editor-heading"><div><div class="eyebrow">YOUR PROMPTS</div><h1>{prompt.name}</h1><p class="intro">Select some text. Press your shortcut. Keep going.</p></div><label class="enabled-toggle"><input type="checkbox" bind:checked={prompt.enabled} /><span>{prompt.enabled ? 'Enabled' : 'Paused'}</span></label></div>
-          {#if !hasKey}<button class="setup-callout" onclick={() => section = 'settings'}><span class="callout-icon">↗</span><span><strong>One key. All your prompts.</strong><small>Add your OpenRouter API key to start using PromptKey.</small></span><span>Set Up →</span></button>{/if}
+          {#if !hasKey}<button class="setup-callout" onclick={() => section = 'settings'}><span class="callout-icon">↗</span><span><strong>One key. All your prompts.</strong><small>Add your OpenRouter API key to start using KeyDock.</small></span><span>Set Up →</span></button>{/if}
           <section class="card editor-card">
             <div class="section-number">01 <span>THE PROMPT</span></div>
             <label for="prompt-name">Name</label><input id="prompt-name" bind:value={prompt.name} maxlength="120" placeholder="Give this prompt a name" />

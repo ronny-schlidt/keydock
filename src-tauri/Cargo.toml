@@ -1,5 +1,5 @@
 [package]
-name = "promptkey"
+name = "keydock"
 version = "0.1.0"
 description = "Your prompts, one shortcut away"
 authors = ["Ronny Schlidt"]
@@ -8,7 +8,7 @@ rust-version = "1.90"
 license = "MIT"
 
 [lib]
-name = "promptkey_lib"
+name = "keydock_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

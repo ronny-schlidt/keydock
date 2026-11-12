@@ -2,7 +2,7 @@
 
 Decision date: 2026-11-11.
 
-PromptKey needs a small settings UI, global per-prompt shortcuts, selected-text transformation through OpenRouter, and native integration on macOS and Windows. A Hammerspoon script would cover macOS only, so the implementation is a standalone desktop application.
+KeyDock needs a small settings UI, global per-prompt shortcuts, selected-text transformation through OpenRouter, and native integration on macOS and Windows. A Hammerspoon script would cover macOS only, so the implementation is a standalone desktop application.
 
 ## Decisions
 
@@ -14,9 +14,13 @@ PromptKey needs a small settings UI, global per-prompt shortcuts, selected-text 
 - **Fixed OpenRouter API:** Rust sends a system instruction and selected source text to `https://openrouter.ai/api/v1/chat/completions`. No tools, agent loop or prompt-controlled URLs. An API failure does not trigger a silent model fallback.
 - **Conservative insertion:** wait for modifier release, read selection via copy, restore clipboard, call OpenRouter, watch focus/selection during the request, copy and compare the selection again, then paste. If a check fails, show the result for review. The original app is never force-focused.
 
+## Application Identity
+
+On 2026-11-12, PromptKey was renamed to KeyDock in the UI, packages, icons, project folder and private GitHub repository. The application identifier and keyring service remain `com.ronnyschlidt.promptkey` to preserve existing local settings, credentials and installer identity. No application features or prompt schemas changed.
+
 ## Boundaries to Revisit
 
-Native key remapping is intentionally left to existing tools. Global shortcuts recognize Hyper, but PromptKey does not install keyboard hooks to turn Caps Lock into Hyper. Built-in remapping would require its own configuration, accessibility/input-monitoring evaluation and platform testing.
+Native key remapping is intentionally left to existing tools. Global shortcuts recognize Hyper, but KeyDock does not install keyboard hooks to turn Caps Lock into Hyper. Built-in remapping would require its own configuration, accessibility/input-monitoring evaluation and platform testing.
 
 Clipboard-rs covers common clipboard content, not arbitrary application-owned representations or multi-item transactions. Improve fidelity with dedicated platform snapshot implementations if users need exact rich clipboard restoration.
 
