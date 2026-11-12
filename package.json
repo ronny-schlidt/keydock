@@ -9,7 +9,9 @@
     "preview": "vite preview --host 127.0.0.1",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "verify": "bash scripts/check.sh",
+    "mac:install": "bash scripts/install-macos.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

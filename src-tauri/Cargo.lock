@@ -2129,6 +2129,7 @@ name = "keydock"
 version = "0.1.0"
 dependencies = [
  "clipboard-rs",
+ "dispatch2",
  "enigo",
  "keyring",
  "objc2-app-kit",

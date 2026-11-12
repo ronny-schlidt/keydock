@@ -47,7 +47,21 @@ fn wait_for_modifiers() -> Result<(), String> {
     Ok(())
 }
 
+/// enigo maps the key through the current keyboard layout; macOS aborts the
+/// app when that lookup runs off the main thread.
+#[cfg(target_os = "macos")]
 fn chord(key: char) -> Result<(), String> {
+    let mut result = Err("Could not send keyboard shortcut.".into());
+    dispatch2::DispatchQueue::main().exec_sync(|| result = send_chord(key));
+    result
+}
+
+#[cfg(not(target_os = "macos"))]
+fn chord(key: char) -> Result<(), String> {
+    send_chord(key)
+}
+
+fn send_chord(key: char) -> Result<(), String> {
     let settings = Settings {
         open_prompt_to_get_permissions: false,
         ..Settings::default()
@@ -172,27 +186,61 @@ impl Drop for ClipboardGuard {
     }
 }
 
-pub fn capture_selection(own_window_focused: bool) -> Result<Selection, String> {
+/// `retry` failures only need a new selection or another attempt; the others
+/// need the user to fix permissions or the clipboard first.
+pub struct CaptureError {
+    pub message: String,
+    pub retry: bool,
+}
+
+fn retry(message: impl Into<String>) -> CaptureError {
+    CaptureError {
+        message: message.into(),
+        retry: true,
+    }
+}
+
+fn setup(message: impl Into<String>) -> CaptureError {
+    CaptureError {
+        message: message.into(),
+        retry: false,
+    }
+}
+
+pub fn capture_selection(own_window_focused: bool) -> Result<Selection, CaptureError> {
     if own_window_focused {
-        return Err("Select text in another app, then press your prompt shortcut.".into());
+        return Err(retry(
+            "Select text in another app, then press your prompt shortcut.",
+        ));
     }
     if !has_permissions() {
-        return Err("Allow KeyDock in System Settings → Privacy & Security → Accessibility, then try again.".into());
+        return Err(setup("Allow KeyDock in System Settings → Privacy & Security → Accessibility, then try again."));
     }
-    wait_for_modifiers()?;
-    let target = native::target()?;
+    wait_for_modifiers().map_err(retry)?;
+    let target = native::target().map_err(retry)?;
     #[cfg(target_os = "macos")]
     if matches!(target.range, Some((_, 0))) {
-        return Err("Select some text first.".into());
+        return Err(retry("Select some text first."));
     }
-    let mut guard = ClipboardGuard::new()?;
-    let text = guard.copy_selection(&target)?.ok_or(
-        "No selected text could be copied. Select text in an editable field and try again.",
-    )?;
+    let mut guard = ClipboardGuard::new().map_err(setup)?;
+    let text = guard
+        .copy_selection(&target)
+        .map_err(setup)?
+        .ok_or_else(|| {
+            retry(
+                "No selected text could be copied. Select text in an editable field and try again.",
+            )
+        })?;
     if text.len() > 80_000 {
-        return Err("Select a shorter text (up to 80,000 bytes).".into());
+        return Err(retry("Select a shorter text (up to 80,000 bytes)."));
     }
     Ok(Selection { text, target })
+}
+
+/// The system alert sound, so a failure that keeps the window closed is not silent.
+pub fn alert() {
+    #[cfg(target_os = "macos")]
+    objc2_app_kit::NSBeep();
 }
 
 pub fn replace_selection(selection: &Selection, output: &str) -> Result<bool, String> {

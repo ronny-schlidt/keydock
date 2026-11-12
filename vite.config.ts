@@ -6,5 +6,5 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
-  build: { target: 'es2022' },
+  build: { target: 'es2022', rollupOptions: { input: ['index.html', 'toast.html'] } },
 });

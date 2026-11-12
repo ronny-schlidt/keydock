@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local settings window can receive status events.",
+  "description": "Only the local settings window can receive status events and follow the chosen appearance.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-theme"]
 }

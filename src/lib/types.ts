@@ -22,6 +22,13 @@ export interface Status {
   result?: string;
 }
 
+export interface KeyCheck {
+  limitRemaining: number | null;
+  usage: number;
+  isFreeTier: boolean;
+  modelFound: boolean | null;
+}
+
 export interface Bootstrap {
   config: Config;
   hasKey: boolean;

@@ -5,7 +5,7 @@ mod openrouter;
 use config::{Config, Prompt};
 use serde::Serialize;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Mutex,
 };
 use tauri::{Emitter, Manager};
@@ -14,6 +14,9 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 // Keep the original credential namespace so the rename preserves saved API keys.
 const KEY_SERVICE: &str = "com.ronnyschlidt.promptkey";
+const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
+#[cfg(target_os = "macos")]
+const TRAY_DONE_ICON: &[u8] = include_bytes!("../icons/tray-done.png");
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +44,8 @@ struct AppState {
     shortcut_errors: Mutex<Vec<String>>,
     busy: AtomicBool,
     recording: AtomicBool,
+    /// Counts `publish` calls so a delayed tray-icon reset can tell whether a newer status took over.
+    published: AtomicU64,
     client: reqwest::Client,
 }
 
@@ -55,8 +60,21 @@ fn read_key() -> Result<String, String> {
         .map_err(|_| "Add your OpenRouter API key in Settings first.".into())
 }
 
+/// macOS: show a Dock icon only while the settings window is open; otherwise live in the menu bar.
+fn set_dock_icon(app: &tauri::AppHandle, visible: bool) {
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(if visible {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    });
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, visible);
+}
+
 fn show(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        set_dock_icon(app, true);
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
@@ -64,19 +82,113 @@ fn show(app: &tauri::AppHandle) {
 }
 
 fn publish(app: &tauri::AppHandle, status: Status) {
-    if let Ok(mut current) = app.state::<AppState>().status.lock() {
+    let state = app.state::<AppState>();
+    if let Ok(mut current) = state.status.lock() {
         *current = status.clone();
     }
+    let generation = state.published.fetch_add(1, Ordering::SeqCst) + 1;
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_tooltip(Some(format!("KeyDock — {}", status.message)));
         #[cfg(target_os = "macos")]
-        let _ = tray.set_title(if status.phase == "working" {
-            Some("···")
-        } else {
-            None
-        });
+        match status.phase.as_str() {
+            // `pulse_tray` owns the icon while an operation runs.
+            "working" => {}
+            "success" => {
+                set_tray_icon(app, TRAY_DONE_ICON);
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    if app.state::<AppState>().published.load(Ordering::SeqCst) == generation {
+                        set_tray_icon(&app, TRAY_ICON);
+                    }
+                });
+            }
+            _ => set_tray_icon(app, TRAY_ICON),
+        }
     }
+    #[cfg(target_os = "macos")]
+    if status.phase != "idle" {
+        show_toast(app);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = generation;
     let _ = app.emit("status", status);
+}
+
+/// macOS: a click-through toast at the bottom of the main screen shows progress, results and errors.
+/// It never takes focus, because a focused window would turn every run into review. `toast.html`
+/// renders the status events and hides the window itself once a run has finished.
+#[cfg(target_os = "macos")]
+fn show_toast(app: &tauri::AppHandle) {
+    let Some(toast) = app.get_webview_window("toast") else {
+        return;
+    };
+    if let (Ok(Some(monitor)), Ok(size)) = (toast.primary_monitor(), toast.outer_size()) {
+        let area = monitor.work_area();
+        let _ = toast.set_position(tauri::PhysicalPosition::new(
+            area.position.x + (area.size.width as i32 - size.width as i32) / 2,
+            area.position.y + area.size.height as i32 - size.height as i32,
+        ));
+    }
+    let window = toast.clone();
+    let _ = toast.run_on_main_thread(move || {
+        use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
+        let Ok(pointer) = window.ns_window() else {
+            return;
+        };
+        // SAFETY: Tauri returns the live NSWindow of this webview window; we are on the main thread.
+        let ns_window = unsafe { &*pointer.cast::<NSWindow>() };
+        ns_window.setCollectionBehavior(
+            NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::Stationary,
+        );
+        // `show()` would call makeKeyAndOrderFront; this only orders the window in front.
+        ns_window.orderFrontRegardless();
+    });
+}
+
+/// Plain `set_icon` drops the macOS template flag, which would turn the icon black on a dark menu bar.
+#[cfg(target_os = "macos")]
+fn set_tray_image(app: &tauri::AppHandle, image: tauri::image::Image<'static>) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_icon_with_as_template(Some(image), true);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn set_tray_icon(app: &tauri::AppHandle, png: &'static [u8]) {
+    if let Ok(image) = tauri::image::Image::from_bytes(png) {
+        set_tray_image(app, image);
+    }
+}
+
+/// macOS: let the menu-bar icon breathe (fade between 100 % and 30 % opacity) until the task is aborted.
+/// Windows is not animated and keeps the tooltip only.
+#[cfg(target_os = "macos")]
+async fn pulse_tray(app: tauri::AppHandle) {
+    const FRAMES: usize = 24;
+    let Ok(base) = tauri::image::Image::from_bytes(TRAY_ICON) else {
+        return;
+    };
+    let frames: Vec<_> = (0..FRAMES)
+        .map(|i| {
+            let phase = i as f32 / FRAMES as f32 * std::f32::consts::TAU;
+            let opacity = 0.3 + 0.35 * (1.0 + phase.cos());
+            let rgba = base
+                .rgba()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .flat_map(|p| [p[0], p[1], p[2], (p[3] as f32 * opacity).round() as u8])
+                .collect();
+            tauri::image::Image::new_owned(rgba, base.width(), base.height())
+        })
+        .collect();
+    for frame in frames.iter().cycle() {
+        set_tray_image(&app, frame.clone());
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+    }
 }
 
 fn register_shortcuts(app: &tauri::AppHandle, config: &Config) -> Vec<String> {
@@ -194,6 +306,14 @@ fn delete_api_key() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn check_api_key(
+    app: tauri::AppHandle,
+    model: String,
+) -> Result<openrouter::KeyCheck, String> {
+    openrouter::check(&app.state::<AppState>().client, &read_key()?, model.trim()).await
+}
+
+#[tauri::command]
 fn set_recording(app: tauri::AppHandle, active: bool) -> Result<Vec<String>, String> {
     let state = app.state::<AppState>();
     state.recording.store(active, Ordering::SeqCst);
@@ -273,7 +393,15 @@ fn execute(app: tauri::AppHandle, prompt: Prompt) {
         let mut working = Status::new("working", "Reading selection…");
         working.prompt_name = Some(prompt.name.clone());
         publish(&app, working.clone());
+        #[cfg(target_os = "macos")]
+        let pulse = tauri::async_runtime::spawn(pulse_tray(app.clone()));
         let outcome = execute_inner(&app, &prompt, &mut working).await;
+        // Wait until the pulse has stopped so it cannot overwrite the final icon.
+        #[cfg(target_os = "macos")]
+        {
+            pulse.abort();
+            let _ = pulse.await;
+        }
         match outcome {
             Ok((text, replaced)) => {
                 let mut status = Status::new(
@@ -291,22 +419,58 @@ fn execute(app: tauri::AppHandle, prompt: Prompt) {
                     show(&app);
                 }
             }
-            Err(error) => {
-                let mut status = Status::new("error", &error);
+            Err(failure) => {
+                let mut status = Status::new("error", &failure.message);
                 status.prompt_name = Some(prompt.name);
                 publish(&app, status);
-                show(&app);
+                if failure.quiet {
+                    desktop::alert();
+                } else if cfg!(not(target_os = "macos")) {
+                    // macOS shows the error in the toast instead of opening settings.
+                    show(&app);
+                }
             }
         }
         app.state::<AppState>().busy.store(false, Ordering::SeqCst);
     });
 }
 
+/// A shortcut run that failed. Quiet failures only need another selection or
+/// attempt, so they update the tray tooltip without opening the window.
+struct Failure {
+    message: String,
+    quiet: bool,
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            quiet: false,
+        }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
+}
+
+impl From<desktop::CaptureError> for Failure {
+    fn from(error: desktop::CaptureError) -> Self {
+        Self {
+            message: error.message,
+            quiet: error.retry,
+        }
+    }
+}
+
 async fn execute_inner(
     app: &tauri::AppHandle,
     prompt: &Prompt,
     status: &mut Status,
-) -> Result<(String, bool), String> {
+) -> Result<(String, bool), Failure> {
     let key = read_key()?;
     let app_capture = app.clone();
     let selection = tauri::async_runtime::spawn_blocking(move || {
@@ -395,6 +559,7 @@ pub fn run() {
             save_config,
             set_api_key,
             delete_api_key,
+            check_api_key,
             set_recording,
             request_accessibility,
             copy_result,
@@ -415,6 +580,7 @@ pub fn run() {
                 shortcut_errors: Mutex::new(vec![]),
                 busy: AtomicBool::new(false),
                 recording: AtomicBool::new(false),
+                published: AtomicU64::new(0),
                 client,
             });
             let errors = register_shortcuts(app.handle(), &config);
@@ -424,9 +590,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit KeyDock", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &quit])?;
             tauri::tray::TrayIconBuilder::with_id("main")
-                .icon(tauri::image::Image::from_bytes(include_bytes!(
-                    "../icons/tray.png"
-                ))?)
+                .icon(tauri::image::Image::from_bytes(TRAY_ICON)?)
                 .icon_as_template(true)
                 .tooltip("KeyDock — Ready")
                 .menu(&menu)
@@ -437,7 +601,28 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
-            if !std::env::args().any(|a| a == "--background") {
+            #[cfg(target_os = "macos")]
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "toast",
+                tauri::WebviewUrl::App("toast.html".into()),
+            )
+            .title("KeyDock")
+            .inner_size(520.0, 132.0)
+            .resizable(false)
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .focused(false)
+            .focusable(false)
+            .visible(false)
+            .build()?
+            .set_ignore_cursor_events(true)?;
+            if std::env::args().any(|a| a == "--background") {
+                set_dock_icon(app.handle(), false);
+            } else {
                 show(app.handle());
             }
             Ok(())
@@ -446,6 +631,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                set_dock_icon(window.app_handle(), false);
                 let state = window.state::<AppState>();
                 if state.recording.swap(false, Ordering::SeqCst) {
                     if let Ok(config) = state.config.lock() {

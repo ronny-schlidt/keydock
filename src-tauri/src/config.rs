@@ -103,7 +103,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let prompts = [
-            ("correct", "Fix Writing", "E", "Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text."),
+            ("correct", "Fix Writing", "W", "Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text."),
             ("translate", "Translate to English", "T", "Translate the text into natural US English. Preserve meaning, tone and paragraph structure. Return only the translation."),
             ("shorten", "Make It Shorter", "K", "Make the text more concise without losing essential information. Preserve its language, meaning and tone. Return only the revised text."),
         ].into_iter().map(|(id, name, key, instructions)| Prompt { id: id.into(), name: name.into(), shortcut: format!("Ctrl+Alt+Shift+Super+{key}"), instructions: instructions.into(), model: String::new(), enabled: true, output: "replace".into() }).collect();
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn aliases_cannot_assign_same_shortcut_twice() {
         let mut config = Config::default();
-        config.prompts[1].shortcut = "Control+Alt+Shift+Super+KeyE".into();
+        config.prompts[1].shortcut = "Control+Alt+Shift+Super+KeyW".into();
         assert!(config.validate().is_err());
     }
     #[test]

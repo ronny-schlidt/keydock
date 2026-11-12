@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>KeyDock</title>
+    <style>
+      /* The window is transparent and click-through; only the pill is drawn. */
+      :root{--bg:#ffffffeb;--text:#202632;--muted:#696f7c;--border:#00000014;--shadow:#1b1f2e33;--track:#7260d633;--spin:#7260d6;--ok:#3f9a7c;--error:#c0545f;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-synthesis:none}
+      :root[data-theme=dark]{--bg:#1f2029eb;--text:#eceef4;--muted:#a3a7b5;--border:#ffffff1a;--shadow:#00000066;--track:#a594ea40;--spin:#b6a8f4;--ok:#6fc7a5;--error:#f08b97}
+      html,body{margin:0;height:100%;background:transparent;overflow:hidden;-webkit-user-select:none;user-select:none;cursor:default}
+      body{display:flex;align-items:flex-end;justify-content:center;padding:0 16px 30px;box-sizing:border-box}
+      .toast{display:flex;align-items:center;gap:12px;max-width:100%;padding:12px 20px 12px 14px;border-radius:999px;background:var(--bg);border:1px solid var(--border);box-shadow:0 10px 28px var(--shadow),0 1px 3px var(--shadow);color:var(--text);font-size:14px;line-height:1.4;opacity:0;transform:translateY(10px) scale(.97);transition:opacity .18s ease,transform .22s cubic-bezier(.2,.9,.3,1.2)}
+      .toast.shown{opacity:1;transform:none}
+      body[data-phase=error] .toast{border-radius:16px;align-items:flex-start}
+      .icon{position:relative;width:22px;height:22px;flex-shrink:0}
+      .icon::before{content:"";position:absolute;inset:0;border-radius:50%}
+      [data-phase=working] .icon::before{border:2.5px solid var(--track);border-top-color:var(--spin);animation:spin .8s linear infinite}
+      [data-phase=success] .icon::before{background:var(--ok)}
+      [data-phase=review] .icon::before{background:var(--spin)}
+      [data-phase=error] .icon::before{background:var(--error)}
+      .icon svg{position:absolute;inset:0;width:22px;height:22px;display:none;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+      [data-phase=success] .ok,[data-phase=review] .review,[data-phase=error] .error{display:block}
+      .text{min-width:0;display:flex;align-items:baseline;gap:8px}
+      [data-phase=error] .text{display:block}
+      strong{font-weight:650;white-space:nowrap}
+      .message{color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+      [data-phase=error] .message{margin-top:2px}
+      @keyframes spin{to{transform:rotate(360deg)}}
+      @media(prefers-reduced-motion:reduce){.toast{transition:none}[data-phase=working] .icon::before{animation-duration:2.4s}}
+    </style>
+  </head>
+  <body data-phase="idle">
+    <div class="toast" role="status" aria-live="polite">
+      <span class="icon" aria-hidden="true">
+        <svg class="ok" viewBox="0 0 20 20"><path d="M6 10.4l2.6 2.6L14.2 7.2" /></svg>
+        <svg class="review" viewBox="0 0 20 20"><path d="M6.5 10h7M10.5 7l3 3-3 3" /></svg>
+        <svg class="error" viewBox="0 0 20 20"><path d="M10 5.8v5M10 14.2v.1" /></svg>
+      </span>
+      <span class="text"><strong id="title"></strong><span class="message" id="message"></span></span>
+    </div>
+    <script type="module" src="/src/toast.ts"></script>
+  </body>
+</html>

@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
@@ -29,7 +29,8 @@ clipboard-rs = "0.3.5"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", features = ["NSPasteboard"] }
+objc2-app-kit = { version = "0.3", features = ["NSGraphics", "NSPasteboard", "NSResponder", "NSWindow"] }
+dispatch2 = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_DataExchange", "Win32_System_Threading"] }
@@ -39,3 +40,10 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
+
+# `npm run mac:install`: rebuilds in seconds instead of ~75 s; the binary is ~18 % larger.
+[profile.local]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+incremental = true

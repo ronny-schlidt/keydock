@@ -1,0 +1,48 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)publish, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run tauri build -- --bundles app
+      - name: Sign and Verify macOS Development Bundle
+        run: |
+          codesign --force --deep --sign - src-tauri/target/release/bundle/macos/KeyDock.app
+          codesign --verify --deep --strict src-tauri/target/release/bundle/macos/KeyDock.app
+      # ditto keeps the bundle's signature and extended attributes intact inside the zip.
+      - name: Zip macOS App
+        run: ditto -c -k --keepParent src-tauri/target/release/bundle/macos/KeyDock.app KeyDock-macos.zip
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" KeyDock-macos.zip --clobber
+          else
+            gh release create "$TAG" KeyDock-macos.zip --title "KeyDock $TAG" --notes-file .github/release-notes.md
+          fi

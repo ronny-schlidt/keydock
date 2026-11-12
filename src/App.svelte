@@ -2,15 +2,17 @@
   import { onMount } from 'svelte';
   import { invoke, isTauri } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import type { Bootstrap, Config, Status } from './lib/types';
-  import { prettyShortcut, recordShortcut } from './lib/shortcuts';
+  import type { Bootstrap, Config, KeyCheck, Status } from './lib/types';
+  import { modelName, suggestedModels } from './lib/models';
+  import { heldModifiers, prettyShortcut, recordingHint, recordShortcut } from './lib/shortcuts';
   import { parseImport } from './lib/import';
+  import { loadTheme, saveTheme, type ThemePreference } from './lib/theme';
 
   const desktop = isTauri();
   const defaultConfig: Config = {
     version: 1, defaultModel: 'google/gemini-2.5-flash-lite', launchAtLogin: false,
     prompts: [
-      { id: 'correct', name: 'Fix Writing', instructions: 'Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text.', shortcut: 'Ctrl+Alt+Shift+Super+E', model: '', enabled: true, output: 'replace' },
+      { id: 'correct', name: 'Fix Writing', instructions: 'Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text.', shortcut: 'Ctrl+Alt+Shift+Super+W', model: '', enabled: true, output: 'replace' },
       { id: 'translate', name: 'Translate to English', instructions: 'Translate the text into natural US English. Preserve meaning, tone and paragraph structure. Return only the translation.', shortcut: 'Ctrl+Alt+Shift+Super+T', model: '', enabled: true, output: 'replace' },
       { id: 'shorten', name: 'Make It Shorter', instructions: 'Make the text more concise without losing essential information. Preserve its language, meaning and tone. Return only the revised text.', shortcut: 'Ctrl+Alt+Shift+Super+K', model: '', enabled: true, output: 'replace' },
     ],
@@ -22,6 +24,9 @@
   let section = $state<'prompts' | 'settings'>('prompts');
   let hasKey = $state(false);
   let apiKey = $state('');
+  let checkingKey = $state(false);
+  let keyCheck = $state<{ ok: boolean; message: string } | null>(null);
+  let customModel = $state(false);
   let mac = $state(true);
   let accessibility = $state(true);
   let loading = $state(desktop);
@@ -30,14 +35,18 @@
   let notice = $state('');
   let shortcutErrors = $state<string[]>([]);
   let recording = $state(false);
+  let held = $state('');
+  let recorderHint = $state('');
   let deleteArmed = $state(false);
   let sample = $state('hallo, ich wolte fragen ob wir uns morgen trefen könen.');
   let sampleResult = $state('');
   let testing = $state(false);
+  let theme = $state<ThemePreference>(loadTheme());
   let status = $state<Status>({ phase: 'idle', message: desktop ? 'Ready when you are' : 'Browser preview · run the desktop app to use shortcuts' });
   const prompt = $derived(config.prompts.find(p => p.id === selectedId));
   const dirty = $derived(JSON.stringify(config) !== saved);
   const busy = $derived(status.phase === 'working');
+  const promptModelChoice = $derived(customModel ? 'custom' : !prompt?.model ? '' : suggestedModels.some(m => m.id === prompt.model) ? prompt.model : 'custom');
 
   function applyBootstrap(data: Bootstrap) {
     config = data.config;
@@ -74,26 +83,45 @@
     if (!desktop) { error = 'API keys are only entered in the installed desktop app.'; return; }
     try {
       await invoke('set_api_key', { key: apiKey });
-      apiKey = ''; hasKey = true; notice = 'API key saved in your system credential store.';
+      apiKey = ''; hasKey = true; keyCheck = null; notice = 'API key saved in your system credential store.';
     } catch (e) { error = String(e); }
   }
 
   async function removeKey() {
-    try { await invoke('delete_api_key'); hasKey = false; notice = 'API key removed.'; }
+    try { await invoke('delete_api_key'); hasKey = false; keyCheck = null; notice = 'API key removed.'; }
     catch (e) { error = String(e); }
+  }
+
+  async function checkKey() {
+    checkingKey = true; keyCheck = null;
+    try {
+      const model = config.defaultModel.trim();
+      const result = await invoke<KeyCheck>('check_api_key', { model });
+      const credit = result.limitRemaining === null ? 'No spending limit on this key' : `$${result.limitRemaining.toFixed(2)} left on this key`;
+      const tier = result.isFreeTier ? ' · Free tier: only :free models work' : '';
+      const modelNote = result.modelFound === null ? 'Model list unavailable.' : result.modelFound ? `${modelName(model)} is available.` : `OpenRouter does not list ${model}. Choose another default model.`;
+      keyCheck = { ok: result.modelFound !== false, message: `Key works. ${credit}${tier}. ${modelNote}` };
+    } catch (e) { keyCheck = { ok: false, message: String(e) }; }
+    finally { checkingKey = false; }
+  }
+
+  function choosePromptModel(value: string) {
+    if (!prompt) return;
+    customModel = value === 'custom';
+    if (!customModel) prompt.model = value;
   }
 
   async function startRecording() {
     error = '';
     try {
       if (desktop) await invoke('set_recording', { active: true });
-      recording = true;
+      held = ''; recorderHint = ''; recording = true;
     } catch (e) { error = String(e); }
   }
 
   async function stopRecording() {
     if (!recording) return;
-    recording = false;
+    recording = false; held = ''; recorderHint = '';
     try { if (desktop) shortcutErrors = await invoke<string[]>('set_recording', { active: false }); }
     catch (e) { error = String(e); }
   }
@@ -102,12 +130,18 @@
     if (!recording) return;
     event.preventDefault(); event.stopPropagation();
     if (event.key === 'Escape') { void stopRecording(); return; }
+    held = heldModifiers(event);
     const shortcut = recordShortcut(event);
-    if (shortcut && prompt) { prompt.shortcut = shortcut; void stopRecording(); }
+    if (shortcut && prompt) { prompt.shortcut = shortcut; void stopRecording(); return; }
+    recorderHint = recordingHint(event, mac);
+  }
+
+  function keyup(event: KeyboardEvent) {
+    if (recording) held = heldModifiers(event);
   }
 
   function select(id: string) {
-    void stopRecording(); selectedId = id; section = 'prompts'; deleteArmed = false; sampleResult = '';
+    void stopRecording(); selectedId = id; section = 'prompts'; deleteArmed = false; sampleResult = ''; customModel = false;
   }
 
   function add() {
@@ -120,6 +154,25 @@
     if (!deleteArmed) { deleteArmed = true; return; }
     config.prompts = config.prompts.filter(p => p.id !== selectedId);
     selectedId = config.prompts[0]?.id ?? ''; deleteArmed = false;
+  }
+
+  // The macOS desktop window showed no grabber for native textarea resizing, so the instructions field gets its own handle.
+  function resizeInstructions(event: PointerEvent) {
+    const handle = event.currentTarget as HTMLElement;
+    const field = handle.previousElementSibling as HTMLTextAreaElement;
+    const startY = event.clientY, startHeight = field.offsetHeight;
+    const move = (e: PointerEvent) => { field.style.height = `${Math.max(135, startHeight + e.clientY - startY)}px`; };
+    const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end); };
+    handle.setPointerCapture(event.pointerId);
+    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+  }
+
+  function resizeInstructionsKey(event: KeyboardEvent) {
+    const step = event.key === 'ArrowDown' ? 24 : event.key === 'ArrowUp' ? -24 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const field = (event.currentTarget as HTMLElement).previousElementSibling as HTMLTextAreaElement;
+    field.style.height = `${Math.max(135, field.offsetHeight + step)}px`;
   }
 
   async function test() {
@@ -165,7 +218,7 @@
   }
 </script>
 
-<svelte:window onkeydown={keydown} onblur={() => { void stopRecording(); }} />
+<svelte:window onkeydown={keydown} onkeyup={keyup} onblur={() => { void stopRecording(); }} />
 
 <div class="app-shell">
   <aside class="sidebar">
@@ -203,13 +256,23 @@
             <div class="card-heading"><h2>OpenRouter Connection</h2><span class:ready={hasKey} class="pill">{hasKey ? 'Key stored' : 'Not connected'}</span></div>
             <p class="muted">Your key is stored in {mac ? 'macOS Keychain' : 'Windows Credential Manager'}. It is never included in prompt exports.</p>
             <label for="api-key">API Key</label><div class="input-action"><input id="api-key" type="password" autocomplete="off" spellcheck="false" bind:value={apiKey} placeholder={hasKey ? 'Enter a new key to replace it' : 'sk-or-…'} disabled={!desktop} /><button class="primary" onclick={saveKey} disabled={!apiKey || !desktop}>Save Key</button></div>
-            {#if hasKey}<button class="text-button danger" onclick={removeKey}>Remove stored key</button>{/if}
-            <label for="default-model">Default Model</label><input id="default-model" bind:value={config.defaultModel} spellcheck="false" placeholder="provider/model-id" /><p class="hint">Use an OpenRouter model ID. Each prompt can override this.</p>
+            {#if hasKey}<div class="key-actions"><button class="secondary" onclick={checkKey} disabled={!desktop || checkingKey}>{checkingKey ? 'Checking…' : 'Check Key'}</button><button class="text-button danger" onclick={removeKey}>Remove stored key</button></div>{/if}
+            {#if keyCheck}<p class:ok={keyCheck.ok} class="key-check" role="status">{keyCheck.message}</p>{/if}
+            <div class="label-line"><span class="field-label">Default Model</span><span>Price per 1M tokens, input / output</span></div>
+            <div class="model-options" role="radiogroup" aria-label="Suggested models">
+              {#each suggestedModels as model}
+                <button role="radio" aria-checked={config.defaultModel === model.id} class="model-option" onclick={() => config.defaultModel = model.id}><span><strong>{model.name}</strong><small>{model.note}</small></span><span class="model-price">{model.price}</span></button>
+              {/each}
+            </div>
+            <label for="default-model" class="sub-label">Model ID</label><input id="default-model" bind:value={config.defaultModel} spellcheck="false" placeholder="provider/model-id" /><p class="hint">Pick a suggestion or enter any OpenRouter model ID. Each prompt can override this.</p>
           </section>
           <section class="card"><h2>Shortcuts & Startup</h2>
             <p class="muted">Hyper means {mac ? 'Control + Option + Shift + Command' : 'Control + Alt + Shift + Windows'}. Map a key such as Caps Lock using your existing keyboard tool. Ordinary shortcuts work too.</p>
             <label class="toggle-row"><span>Launch KeyDock at login<small>Start quietly in the {mac ? 'menu bar' : 'system tray'}.</small></span><input type="checkbox" bind:checked={config.launchAtLogin} /></label>
             {#if mac}<div class="permission-row"><div><strong>Accessibility Access</strong><p class="hint">{accessibility ? 'Access granted.' : 'Required to read and replace text in other apps.'}</p></div><button class="secondary" onclick={checkPermission} disabled={!desktop}>Check Access</button></div>{/if}
+          </section>
+          <section class="card"><h2>Appearance</h2><p class="muted">Applies immediately on this device. It is not part of prompt exports.</p>
+            <div class="theme-switch" role="group" aria-label="Appearance">{#each [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as [value, label]}<button aria-pressed={theme === value} onclick={() => { theme = value as ThemePreference; saveTheme(theme); }}>{label}</button>{/each}</div>
           </section>
           <section class="card"><h2>Take Your Prompts With You</h2><p class="muted">Export your settings or import a shared collection. API keys stay on each person's device.</p><div class="button-row"><button class="secondary" onclick={exportPrompts}>Export Prompts ↓</button><label class="secondary file-label">Import Prompts ↑<input type="file" accept="application/json,.json" onchange={importPrompts} /></label></div></section>
         {:else if prompt}
@@ -218,10 +281,10 @@
           <section class="card editor-card">
             <div class="section-number">01 <span>THE PROMPT</span></div>
             <label for="prompt-name">Name</label><input id="prompt-name" bind:value={prompt.name} maxlength="120" placeholder="Give this prompt a name" />
-            <div class="label-line"><label for="instructions">Instructions</label><span>Applies to your selected text</span></div><textarea id="instructions" class="instructions" bind:value={prompt.instructions} spellcheck="false" placeholder="What should happen to the selected text?"></textarea>
-            <div class="two-column"><div><label for="prompt-model">Model</label><input id="prompt-model" bind:value={prompt.model} placeholder="Use workspace default" spellcheck="false" /><p class="hint">{prompt.model || config.defaultModel}</p></div><div><label for="output">After the Response</label><select id="output" bind:value={prompt.output}><option value="replace">Replace Selection</option><option value="review">Show Result for Review</option></select><p class="hint">If the selection changes, the result opens for review.</p></div></div>
+            <div class="label-line"><label for="instructions">Instructions</label><span>Applies to your selected text</span></div><textarea id="instructions" class="instructions" bind:value={prompt.instructions} spellcheck="false" placeholder="What should happen to the selected text?"></textarea><button type="button" class="resize-handle" aria-label="Resize instructions field (arrow keys)" title="Drag to resize" onpointerdown={resizeInstructions} onkeydown={resizeInstructionsKey}></button>
+            <div class="two-column"><div><label for="prompt-model">Model</label><select id="prompt-model" value={promptModelChoice} onchange={e => choosePromptModel(e.currentTarget.value)}><option value="">Workspace default ({modelName(config.defaultModel)})</option>{#each suggestedModels as model}<option value={model.id}>{model.name} · {model.price}</option>{/each}<option value="custom">Other model ID…</option></select>{#if promptModelChoice === 'custom'}<input class="custom-model" aria-label="Custom model ID" bind:value={prompt.model} placeholder="provider/model-id" spellcheck="false" />{/if}<p class="hint">{prompt.model || config.defaultModel}</p></div><div><label for="output">After the Response</label><select id="output" bind:value={prompt.output}><option value="replace">Replace Selection</option><option value="review">Show Result for Review</option></select><p class="hint">If the selection changes, the result opens for review.</p></div></div>
           </section>
-          <section class="card shortcut-card"><div><div class="section-number">02 <span>THE SHORTCUT</span></div><h2>Your Shortcut</h2><p class="muted">Works while you're in another app.</p></div><div class="shortcut-controls"><button class:recording class="shortcut-recorder" aria-label="Record shortcut" onclick={() => recording ? stopRecording() : startRecording()} disabled={busy}>{#if recording}<span>Press your keys…</span>{:else}{#each prettyShortcut(prompt.shortcut, mac) as key}<kbd>{key}</kbd>{/each}{/if}</button><div class="recorder-actions">{#if recording}<button class="text-button" onclick={stopRecording}>Cancel · Esc</button>{:else}<span>Click to record</span>{#if prompt.shortcut}<button class="text-button" onclick={() => prompt.shortcut = ''}>Clear</button>{/if}{/if}</div></div></section>
+          <section class="card shortcut-card"><div><div class="section-number">02 <span>THE SHORTCUT</span></div><h2>Your Shortcut</h2><p class="muted">Works while you're in another app.</p></div><div class="shortcut-controls"><button class:recording class="shortcut-recorder" aria-label="Record shortcut" onclick={() => recording ? stopRecording() : startRecording()} disabled={busy}>{#if recording}{#if held}{#each prettyShortcut(held, mac) as key}<kbd>{key}</kbd>{/each}<span>+ …</span>{:else}<span>Press your keys…</span>{/if}{:else}{#each prettyShortcut(prompt.shortcut, mac) as key}<kbd>{key}</kbd>{/each}{/if}</button><div class="recorder-actions">{#if recording}<button class="text-button" onclick={stopRecording}>Cancel · Esc</button>{:else}<span>Click to record</span>{#if prompt.shortcut}<button class="text-button" onclick={() => prompt.shortcut = ''}>Clear</button>{/if}{/if}</div>{#if recording && recorderHint}<p class="recorder-hint" role="status">{recorderHint}</p>{/if}</div></section>
           <section class="card"><div class="card-heading"><div><div class="section-number">03 <span>TRY IT OUT</span></div><h2>Test This Prompt</h2></div><button class="secondary" onclick={test} disabled={!desktop || !hasKey || testing || !sample.trim()}>{testing ? 'Working…' : 'Test Prompt ↗'}</button></div><label for="sample" class="sr-only">Sample text</label><textarea id="sample" class="sample" bind:value={sample}></textarea><p class="hint">Sends only this sample to OpenRouter. No other app is changed.</p>{#if sampleResult}<div class="test-result"><div class="eyebrow">RESULT</div><p>{sampleResult}</p></div>{/if}</section>
           <div class="editor-footer"><span>Changes take effect when you save.</span><button class="text-button danger" onclick={removePrompt} onblur={() => deleteArmed = false}>{deleteArmed ? 'Confirm Delete' : 'Delete Prompt'}</button></div>
         {:else}
