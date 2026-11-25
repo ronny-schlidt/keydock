@@ -25,6 +25,26 @@ pub fn has_permissions() -> bool {
 pub fn request_permissions() -> bool {
     native::request_permissions()
 }
+/// Reads the focused target. On macOS a just-enabled Electron accessibility
+/// tree needs a moment to appear, so identification is retried briefly.
+fn current_target() -> Result<Target, String> {
+    #[cfg(target_os = "macos")]
+    if native::enable_app_accessibility() {
+        let started = Instant::now();
+        loop {
+            match native::target() {
+                Err(error)
+                    if error.starts_with("Cannot identify")
+                        && started.elapsed() < Duration::from_millis(500) =>
+                {
+                    thread::sleep(Duration::from_millis(50))
+                }
+                result => return result,
+            }
+        }
+    }
+    native::target()
+}
 pub fn target_unchanged(target: &Target) -> bool {
     native::target().as_ref() == Ok(target)
 }
@@ -217,7 +237,7 @@ pub fn capture_selection(own_window_focused: bool) -> Result<Selection, CaptureE
         return Err(setup("Allow KeyDock in System Settings → Privacy & Security → Accessibility, then try again."));
     }
     wait_for_modifiers().map_err(retry)?;
-    let target = native::target().map_err(retry)?;
+    let target = current_target().map_err(retry)?;
     #[cfg(target_os = "macos")]
     if matches!(target.range, Some((_, 0))) {
         return Err(retry("Select some text first."));
@@ -299,6 +319,8 @@ mod native {
         fn AXIsProcessTrusted() -> bool;
         fn AXIsProcessTrustedWithOptions(options: Ref) -> bool;
         fn AXUIElementCreateSystemWide() -> Ref;
+        fn AXUIElementCreateApplication(pid: i32) -> Ref;
+        fn AXUIElementSetAttributeValue(element: Ref, attribute: Ref, value: Ref) -> i32;
         fn AXUIElementCopyAttributeValue(element: Ref, attribute: Ref, value: *mut Ref) -> i32;
         fn AXUIElementGetPid(element: Ref, pid: *mut i32) -> i32;
         fn AXValueGetValue(value: Ref, kind: u32, result: *mut c_void) -> bool;
@@ -370,10 +392,34 @@ mod native {
     pub fn clipboard_generation() -> u64 {
         objc2_app_kit::NSPasteboard::generalPasteboard().changeCount() as u64
     }
+    fn frontmost_pid() -> Option<i32> {
+        let app = objc2_app_kit::NSWorkspace::sharedWorkspace().frontmostApplication()?;
+        let pid = app.processIdentifier();
+        (pid > 0).then_some(pid)
+    }
+    /// Electron apps (e.g. Missive, Slack) keep their accessibility tree off
+    /// until an assistive app asks for it; without it macOS cannot report the
+    /// focused app or text field. Called only during a shortcut operation.
+    /// Other apps reject the attribute, which is harmless.
+    pub fn enable_app_accessibility() -> bool {
+        let Some(pid) = frontmost_pid() else {
+            return false;
+        };
+        let app = Owned(unsafe { AXUIElementCreateApplication(pid) });
+        let name = string("AXManualAccessibility");
+        let enabled = attribute(app.0, "AXManualAccessibility")
+            .is_some_and(|value| unsafe { CFEqual(value.0, kCFBooleanTrue) });
+        !enabled && unsafe { AXUIElementSetAttributeValue(app.0, name.0, kCFBooleanTrue) } == 0
+    }
     pub fn target() -> Result<Target, String> {
         let system = Owned(unsafe { AXUIElementCreateSystemWide() });
-        let app =
-            attribute(system.0, "AXFocusedApplication").ok_or("Cannot identify the active app.")?;
+        // The system-wide query fails for apps whose tree is still off; the
+        // frontmost app from NSWorkspace is the fallback.
+        let app = attribute(system.0, "AXFocusedApplication")
+            .or_else(|| {
+                frontmost_pid().map(|pid| Owned(unsafe { AXUIElementCreateApplication(pid) }))
+            })
+            .ok_or("Cannot identify the active app.")?;
         let mut pid = 0;
         if unsafe { AXUIElementGetPid(app.0, &mut pid) } != 0 {
             return Err("Cannot identify the active app.".into());
@@ -384,6 +430,7 @@ mod native {
         let window =
             attribute(app.0, "AXFocusedWindow").ok_or("Cannot identify the active window.")?;
         let element = attribute(system.0, "AXFocusedUIElement")
+            .or_else(|| attribute(app.0, "AXFocusedUIElement"))
             .ok_or("Cannot identify the selected text field.")?;
         if let Some(subrole) = attribute(element.0, "AXSubrole") {
             if unsafe { CFEqual(subrole.0, string("AXSecureTextField").0) } {

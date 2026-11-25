@@ -1,6 +1,6 @@
 [package]
 name = "keydock"
-version = "0.1.0"
+version = "0.1.1"
 description = "Your prompts, one shortcut away"
 authors = ["Ronny Schlidt"]
 edition = "2021"
@@ -29,7 +29,7 @@ clipboard-rs = "0.3.5"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3", features = ["NSGraphics", "NSPasteboard", "NSResponder", "NSWindow"] }
+objc2-app-kit = { version = "0.3", features = ["libc", "NSGraphics", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSWindow", "NSWorkspace"] }
 dispatch2 = "0.3"
 
 [target.'cfg(windows)'.dependencies]

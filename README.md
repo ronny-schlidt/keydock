@@ -27,7 +27,7 @@ The app and repository are now named KeyDock. The application identifier and OS 
 
 | Prompt | Default Shortcut | What It Does |
 | --- | --- | --- |
-| Fix Writing | Hyper + W | Correct spelling, punctuation and grammar; keep the original language and tone |
+| Fix Writing | Hyper + W | Correct only actual spelling, punctuation and grammar errors; keep correct informal words (such as "Hi"), the original language and tone |
 | Translate to English | Hyper + T | Translate to natural US English |
 | Make It Shorter | Hyper + K | Shorten while preserving meaning and language |
 

@@ -103,7 +103,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         let prompts = [
-            ("correct", "Fix Writing", "W", "Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text."),
+            ("correct", "Fix Writing", "W", "Correct only actual errors in spelling, punctuation and grammar. Do not change correct words, even if informal, colloquial or borrowed from another language (e.g. \"Hi\", \"okay\", \"cool\"). Never rephrase, never replace words with synonyms and never change greetings or tone. Preserve the original language, meaning and paragraph structure. Return only the corrected text."),
             ("translate", "Translate to English", "T", "Translate the text into natural US English. Preserve meaning, tone and paragraph structure. Return only the translation."),
             ("shorten", "Make It Shorter", "K", "Make the text more concise without losing essential information. Preserve its language, meaning and tone. Return only the revised text."),
         ].into_iter().map(|(id, name, key, instructions)| Prompt { id: id.into(), name: name.into(), shortcut: format!("Ctrl+Alt+Shift+Super+{key}"), instructions: instructions.into(), model: String::new(), enabled: true, output: "replace".into() }).collect();

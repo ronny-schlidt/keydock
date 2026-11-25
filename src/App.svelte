@@ -12,7 +12,7 @@
   const defaultConfig: Config = {
     version: 1, defaultModel: 'google/gemini-2.5-flash-lite', launchAtLogin: false,
     prompts: [
-      { id: 'correct', name: 'Fix Writing', instructions: 'Correct spelling, punctuation and grammar. Preserve the original language, tone, meaning and paragraph structure. Make minimal changes. Return only the corrected text.', shortcut: 'Ctrl+Alt+Shift+Super+W', model: '', enabled: true, output: 'replace' },
+      { id: 'correct', name: 'Fix Writing', instructions: 'Correct only actual errors in spelling, punctuation and grammar. Do not change correct words, even if informal, colloquial or borrowed from another language (e.g. "Hi", "okay", "cool"). Never rephrase, never replace words with synonyms and never change greetings or tone. Preserve the original language, meaning and paragraph structure. Return only the corrected text.', shortcut: 'Ctrl+Alt+Shift+Super+W', model: '', enabled: true, output: 'replace' },
       { id: 'translate', name: 'Translate to English', instructions: 'Translate the text into natural US English. Preserve meaning, tone and paragraph structure. Return only the translation.', shortcut: 'Ctrl+Alt+Shift+Super+T', model: '', enabled: true, output: 'replace' },
       { id: 'shorten', name: 'Make It Shorter', instructions: 'Make the text more concise without losing essential information. Preserve its language, meaning and tone. Return only the revised text.', shortcut: 'Ctrl+Alt+Shift+Super+K', model: '', enabled: true, output: 'replace' },
     ],

@@ -87,3 +87,9 @@ For the verified macOS ad-hoc signature workaround and historical dependency-aud
 **Observed:** with `lto = true` and `codegen-units = 1`, every release rebuild took about 76 s even after a one-line change; 16 codegen units with LTO still took 65 s. Without LTO (`lto = "off"`, 16 units, incremental) a rebuild took 1.4 s and the binary grew from 6.4 MB to 7.6 MB. A full `npm run mac:install` now takes about 5 s after a change.
 
 **Use:** `npm run mac:install` builds with `--profile local` (output in `src-tauri/target/local/`). Keep `[profile.release]` with LTO for distributables.
+
+## Electron apps hide their accessibility tree — 2026-11-25
+
+**Observed:** on a colleague's Mac, shortcuts in the Missive desktop app (Electron) failed with "Cannot identify the active app." while the same Missive version worked on Ronny's Mac, where another assistive tool had probably already enabled the tree. Setting `AXManualAccessibility` to true on Missive's application element fixed it until Missive restarted.
+
+**Use:** `desktop::current_target` sets `AXManualAccessibility` on the frontmost app (from `NSWorkspace`) during each shortcut, retries identification for up to 500 ms after enabling it, and falls back to the `NSWorkspace` app when the system-wide `AXFocusedApplication` query fails. Do not set `AXEnhancedUserInterface` instead; it is known to disturb window animations and window managers. To reproduce, quit Missive (which resets the flag) and use a shortcut without other assistive tools running.
